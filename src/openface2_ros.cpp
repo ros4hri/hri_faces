@@ -27,6 +27,8 @@
 #include "openface2_ros/ActionUnit.h"
 #include "openface2_ros/Face.h"
 #include "openface2_ros/Faces.h"
+#include "hri_msgs/FacialActionUnits.h"
+#include "hri_msgs/FacialLandmarks.h"
 
 #include <sensor_msgs/Image.h>
 
@@ -133,6 +135,8 @@ namespace openface2_ros
 
       camera_sub_ = it_.subscribeCamera(image_topic_, 1, &OpenFace2Ros::process_incoming_, this);
       faces_pub_ = nh_.advertise<Faces>("openface2/faces", 10);
+	  landmarks_pub_ = nh_.advertise<FacialLandmarks>("openface2/landmarks", 10);
+	  
       if(publish_viz_) viz_pub_ = it_.advertise("openface2/image", 1);
       init_openface_();
     }
@@ -315,7 +319,7 @@ namespace openface2_ros
 
         decltype(cv_ptr_rgb->image) viz_img = cv_ptr_rgb->image.clone();
         if(publish_viz_) visualizer.SetImage(viz_img, fx, fy, cx, cy);
-
+		hri_msgs::FacialLandmarks FacialLandmarks; 
         Faces faces;
         faces.header.frame_id = img->header.frame_id;
         faces.header.stamp = Time::now();
@@ -412,16 +416,17 @@ namespace openface2_ros
       		    const auto &landmarks = face_models[model].detected_landmarks;
           		for(unsigned i = 0; i < face_models[model].pdm.NumberOfPoints(); ++i)
           		{
-            		geometry_msgs::Point p;
+
+            		hri_msgs::PointOfInterest2D p;
             		p.x = landmarks.at<float>(i);
             		p.y = landmarks.at<float>(face_models[model].pdm.NumberOfPoints() + i);
-            		face.landmarks_2d.push_back(p);
+            		FacialLandmarks.landmarks.push_back(p);
           		}
 
 	            cv::Mat_<double> shape_3d = face_models[model].GetShape(fx, fy, cx, cy);
           		for(unsigned i = 0; i < face_models[model].pdm.NumberOfPoints(); ++i)
           		{
-            		geometry_msgs::Point p;
+            		hri_msgs::PointOfInterest2D p;
             		p.x = shape_3d.at<double>(i);
             		p.y = shape_3d.at<double>(face_models[model].pdm.NumberOfPoints() + i);
             		p.z = shape_3d.at<double>(face_models[model].pdm.NumberOfPoints() * 2 + i);
@@ -496,6 +501,7 @@ namespace openface2_ros
   		//ROS_INFO("faces size %d", faces.face.size());
   		faces.count = (int)faces.faces.size();
   		faces_pub_.publish(faces);
+		landmarks_pub_.publish(FacialLandmarks);
 
       	if(publish_viz_)
       	{ 
