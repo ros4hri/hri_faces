@@ -47,9 +47,15 @@
 #include <geometry_msgs/TransformStamped.h>
 
 
+
 using namespace std;
 using namespace ros;
 using namespace cv;
+
+struct face_info{
+	std::vector<float> intensity, confidence;
+	std::vector<hri_msgs::PointOfInterest2D>lndmrks;
+};
 
 namespace
 {
@@ -106,6 +112,8 @@ namespace
 }
 
 
+
+
 namespace openface2_ros
 {
   class OpenFace2Ros
@@ -125,7 +133,7 @@ namespace openface2_ros
 
       pnh.param<bool>("publish_viz", publish_viz_, false);
 
-      if(!pnh.getParam("max_faces", max_faces_)) pnh.param<int>("max_faces", max_faces_, 1);
+      if(!pnh.getParam("max_faces", max_faces_)) pnh.param<int>("max_faces", max_faces_, 3);
       if(max_faces_ <= 0) throw invalid_argument("~max_faces must be > 0");
 
       float rate = 0;
@@ -135,9 +143,13 @@ namespace openface2_ros
 
       camera_sub_ = it_.subscribeCamera(image_topic_, 1, &OpenFace2Ros::process_incoming_, this);
       faces_pub_ = nh_.advertise<Faces>("openface2/faces", 10);
-	  landmarks_pub_ = nh_.advertise<hri_msgs::FacialLandmarks>("openface2/landmarks", 10);
-	  facs_pub_ = nh_.advertise<hri_msgs::FacialActionUnits>("openface2/facs", 10);
-	  
+
+	  for (unsigned int model = 0; model < face_models.size(); ++model)	
+	  {
+		
+		landmarks_pub_ = nh_.advertise<hri_msgs::FacialLandmarks>("humans/faces/"+ std::to_string (model) +"/landmarks", 10);
+		facs_pub_ = nh_.advertise<hri_msgs::FacialActionUnits>("humans/faces/"+ std::to_string (model) +"/facs", 10);
+	  }
       if(publish_viz_) viz_pub_ = it_.advertise("openface2/image", 1);
       init_openface_();
     }
@@ -147,6 +159,7 @@ namespace openface2_ros
     }
     
   private:
+	unsigned int face_id;
     void init_openface_()
     {
       	vector<string> arguments(1,"");
@@ -326,7 +339,10 @@ namespace openface2_ros
         faces.header.frame_id = img->header.frame_id;
         faces.header.stamp = Time::now();
 
-        // Go through every model and detect eye gaze, record results and visualise the results
+		//map for face_info (intensity, confidence, landmarks)
+		std::map<int, face_info> dict;
+
+		// Go through every model and detect eye gaze, record results and visualise the results
 		for (size_t model = 0; model < face_models.size(); ++model)
 		{
 			// Visualising and recording the results
@@ -536,6 +552,16 @@ namespace openface2_ros
 
 				msg.intensity = std::vector<float> (std::begin(aus_intensity), std::end(aus_intensity)); 
 				msg.confidence = std::vector<float> (std::begin(aus_confidence), std::end(aus_confidence)); 
+
+				//filling the dict with last seen model info of all models
+				struct face_info F;
+				F.confidence = std::vector<float> (std::begin(aus_confidence), std::end(aus_confidence));
+				F.intensity = std::vector<float> (std::begin(aus_intensity), std::end(aus_intensity));
+				F.lndmrks = std::vector<hri_msgs::PointOfInterest2D> (std::begin(FacialLandmarks.landmarks), std::end(FacialLandmarks.landmarks));
+				dict[model] = F;
+
+				
+
 				facs_pub_.publish(msg);
 
           		for(const auto &au : aus) face.action_units.push_back(get<1>(au));
@@ -562,11 +588,29 @@ namespace openface2_ros
           		//ROS_INFO("models %lu active", model);
           		faces.faces.push_back(face);
         	}
+
+
+			//last seen model info publishing
+			else if(!active_models[model])
+			{
+				hri_msgs::FacialActionUnits msg; 
+				hri_msgs::FacialLandmarks FacialLandmarks; 
+
+				struct face_info old_face_info = dict[model];
+
+				msg.intensity = old_face_info.intensity;
+				msg.confidence = old_face_info.confidence;
+				FacialLandmarks.landmarks = old_face_info.lndmrks;
+
+				facs_pub_.publish(msg);
+				landmarks_pub_.publish(FacialLandmarks);
+			}
         }
   		//ROS_INFO("faces size %d", faces.face.size());
   		faces.count = (int)faces.faces.size();
-  		faces_pub_.publish(faces);
-		landmarks_pub_.publish(FacialLandmarks);
+
+
+		// faces_pub_.publish(faces); replaced with hri_msgs format 
 
       	if(publish_viz_)
       	{ 
