@@ -135,7 +135,8 @@ namespace openface2_ros
 
       camera_sub_ = it_.subscribeCamera(image_topic_, 1, &OpenFace2Ros::process_incoming_, this);
       faces_pub_ = nh_.advertise<Faces>("openface2/faces", 10);
-	  landmarks_pub_ = nh_.advertise<FacialLandmarks>("openface2/landmarks", 10);
+	  landmarks_pub_ = nh_.advertise<hri_msgs::FacialLandmarks>("openface2/landmarks", 10);
+	  facs_pub_ = nh_.advertise<hri_msgs::FacialActionUnits>("openface2/facs", 10);
 	  
       if(publish_viz_) viz_pub_ = it_.advertise("openface2/image", 1);
       init_openface_();
@@ -319,7 +320,8 @@ namespace openface2_ros
 
         decltype(cv_ptr_rgb->image) viz_img = cv_ptr_rgb->image.clone();
         if(publish_viz_) visualizer.SetImage(viz_img, fx, fy, cx, cy);
-		hri_msgs::FacialLandmarks FacialLandmarks; 
+		hri_msgs::FacialLandmarks FacialLandmarks;
+		hri_msgs::FacialActionUnits FacialActionUnits; 
         Faces faces;
         faces.header.frame_id = img->header.frame_id;
         faces.header.stamp = Time::now();
@@ -426,7 +428,7 @@ namespace openface2_ros
 	            cv::Mat_<double> shape_3d = face_models[model].GetShape(fx, fy, cx, cy);
           		for(unsigned i = 0; i < face_models[model].pdm.NumberOfPoints(); ++i)
           		{
-            		hri_msgs::PointOfInterest2D p;
+            		geometry_msgs::Point p;
             		p.x = shape_3d.at<double>(i);
             		p.y = shape_3d.at<double>(face_models[model].pdm.NumberOfPoints() + i);
             		p.z = shape_3d.at<double>(face_models[model].pdm.NumberOfPoints() * 2 + i);
@@ -472,6 +474,69 @@ namespace openface2_ros
             		}
             		it->second.presence = get<1>(au_class);
           		}
+
+				array<float, 93> aus_name;
+				array<float, 93> aus_confidence; 
+				array<float, 93> aus_intensity;
+				hri_msgs::FacialActionUnits msg; 
+
+
+				aus_intensity[msg.INNER_BROW_RAISER] = get<1>(aus_reg[0]);
+				aus_confidence[msg.INNER_BROW_RAISER] = 1.; // OpenFace Does not provide it
+
+				aus_intensity[msg.OUTER_BROW_RAISER] = get<1>(aus_reg[1]);
+				aus_confidence[msg.OUTER_BROW_RAISER] = 1.; // OpenFace Does not provide it	
+
+				aus_intensity[msg.BROW_LOWERER] = get<1>(aus_reg[2]);
+				aus_confidence[msg.BROW_LOWERER] = 1.; // OpenFace Does not provide it	
+
+				aus_intensity[msg.UPPER_LID_RAISER] = get<1>(aus_reg[3]);
+				aus_confidence[msg.UPPER_LID_RAISER] = 1.; // OpenFace Does not provide it					
+
+				aus_intensity[msg.CHEEK_RAISER] = get<1>(aus_reg[4]);
+				aus_confidence[msg.CHEEK_RAISER] = 1.; // OpenFace Does not provide it
+
+				aus_intensity[msg.LID_TIGHTENER] = get<1>(aus_reg[5]);
+				aus_confidence[msg.LID_TIGHTENER] = 1.; // OpenFace Does not provide it	
+
+				aus_intensity[msg.NOSE_WRINKLER] = get<1>(aus_reg[6]);
+				aus_confidence[msg.NOSE_WRINKLER] = 1.; // OpenFace Does not provide it	
+
+				aus_intensity[msg.UPPER_LIP_RAISER] = get<1>(aus_reg[7]);
+				aus_confidence[msg.UPPER_LIP_RAISER] = 1.; // OpenFace Does not provide it
+
+				aus_intensity[msg.DIMPLER] = get<1>(aus_reg[8]);
+				aus_confidence[msg.DIMPLER] = 1.; // OpenFace Does not provide it	
+
+				aus_intensity[msg.LIP_CORNER_DEPRESSOR] = get<1>(aus_reg[9]);
+				aus_confidence[msg.LIP_CORNER_DEPRESSOR] = 1. ;// OpenFace Does not provide it
+
+				aus_intensity[msg.CHIN_RAISER] = get<1>(aus_reg[10]);
+				aus_confidence[msg.CHIN_RAISER] = 1.; // OpenFace Does not provide it
+
+				aus_intensity[msg.LIP_STRETCHER] = get<1>(aus_reg[11]);
+				aus_confidence[msg.LIP_STRETCHER] = 1.; // OpenFace Does not provide it
+
+				aus_intensity[msg.LIP_TIGHTENER] = get<1>(aus_reg[12]);
+				aus_confidence[msg.LIP_TIGHTENER] = 1.; // OpenFace Does not provide it
+
+				aus_intensity[msg.LIPS_PART] = get<1>(aus_reg[13]);
+				aus_confidence[msg.LIPS_PART] = 1.; // OpenFace Does not provide it
+
+				aus_intensity[msg.JAW_DROP] = get<1>(aus_reg[14]);
+				aus_confidence[msg.JAW_DROP] = 1.; // OpenFace Does not provide it
+
+				aus_intensity[msg.LIP_SUCK] = get<1>(aus_reg[15]);
+				aus_confidence[msg.LIP_SUCK] = 1.; // OpenFace Does not provide it
+
+				aus_intensity[msg.BLINK] = get<1>(aus_reg[16]);
+				aus_confidence[msg.BLINK] = 1.; // OpenFace Does not provide it
+
+
+
+				msg.intensity = std::vector<float> (std::begin(aus_intensity), std::end(aus_intensity)); 
+				msg.confidence = std::vector<float> (std::begin(aus_confidence), std::end(aus_confidence)); 
+				facs_pub_.publish(msg);
 
           		for(const auto &au : aus) face.action_units.push_back(get<1>(au));
 
@@ -536,6 +601,8 @@ namespace openface2_ros
     image_transport::ImageTransport it_;
     image_transport::CameraSubscriber camera_sub_;
     Publisher faces_pub_;
+	Publisher landmarks_pub_;
+	Publisher facs_pub_;
 
     bool publish_viz_;
     image_transport::Publisher viz_pub_;
